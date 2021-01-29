@@ -59,6 +59,7 @@ rkgrf_match(struct device *parent, void *match, void *aux)
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3288-pmu") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3288-sgrf") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3308-grf") ||
+	    OF_is_compatible(faa->fa_node, "rockchip,rk3328-grf") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3399-grf") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3399-pmugrf"));
 }
