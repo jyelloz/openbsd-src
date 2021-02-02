@@ -209,6 +209,7 @@ pci*		at rkpcie?
 rkpwm*		at fdt?
 rkrng*		at fdt?
 rkdwusb*	at fdt?
+rkusbphy*	at fdt?
 dwmmc*		at fdt?
 sdmmc*		at dwmmc?
 

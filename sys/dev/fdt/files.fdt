@@ -375,6 +375,10 @@ device	rktemp
 attach	rktemp at fdt
 file	dev/fdt/rktemp.c		rktemp
 
+device	rkusbphy
+attach	rkusbphy at fdt
+file	dev/fdt/rkusbphy.c		rkusbphy
+
 device	rkvop
 attach	rkvop at fdt
 file	dev/fdt/rkvop.c			rkvop
