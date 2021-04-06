@@ -323,6 +323,10 @@ device	rkdwhdmi: dwhdmi, i2cbus
 attach	rkdwhdmi at fdt
 file	dev/fdt/rkdwhdmi.c		rkdwhdmi
 
+device	rkdwhdmiphy: fdt
+attach	rkdwhdmiphy at fdt
+file	dev/fdt/rkdwhdmiphy.c		rkdwhdmiphy
+
 device	rkdwusb: fdt
 attach	rkdwusb at fdt
 file	dev/fdt/rkdwusb.c		rkdwusb

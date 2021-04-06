@@ -253,6 +253,7 @@ rkdrm*		at fdt?
 drm*		at rkdrm?
 wsdisplay*	at rkdrm?
 rkdwhdmi*	at fdt?
+rkdwhdmiphy*	at fdt?
 rkemmcphy*	at fdt?
 rkgpio*		at fdt?
 rkiic*		at fdt?
