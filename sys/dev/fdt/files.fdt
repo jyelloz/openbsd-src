@@ -387,6 +387,10 @@ device	rkvop
 attach	rkvop at fdt
 file	dev/fdt/rkvop.c			rkvop
 
+device	rk3328dwhdmi
+attach	rk3328dwhdmi at fdt
+file	dev/fdt/rk3328dwhdmi.c		rk3328dwhdmi
+
 device	dwmmc: sdmmcbus
 attach	dwmmc at fdt
 file	dev/fdt/dwmmc.c			dwmmc
