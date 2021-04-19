@@ -266,6 +266,7 @@ rkpwm*		at fdt?
 rkrng*		at fdt?
 rktemp*		at fdt?
 rkvop*		at fdt?
+rk3328vop*	at fdt?
 rkdwusb*	at fdt?
 rkusbphy*	at fdt?
 dwmmc*		at fdt?
