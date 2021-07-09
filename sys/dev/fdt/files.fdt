@@ -145,8 +145,8 @@ attach	bse at fdt with bse_fdt
 file	dev/fdt/if_bse_fdt.c		bse_fdt
 
 include	"dev/usb/dwc2/files.dwc2"
-attach	dwctwo at fdt with bcmdwctwo
-file	dev/fdt/bcm2835_dwctwo.c	bcmdwctwo	needs-flag
+#attach	dwctwo at fdt with bcmdwctwo
+#file	dev/fdt/bcm2835_dwctwo.c	bcmdwctwo	needs-flag
 
 device	exrtc
 attach	exrtc at fdt
@@ -394,6 +394,9 @@ file	dev/fdt/rk3328vop.c		rk3328vop
 device	rk3328dwhdmi
 attach	rk3328dwhdmi at fdt
 file	dev/fdt/rk3328dwhdmi.c		rk3328dwhdmi
+
+attach	dwctwo at fdt with rk3328_dwctwo
+file	dev/fdt/rk3328_dwctwo.c		rk3328_dwctwo
 
 device	dwmmc: sdmmcbus
 attach	dwmmc at fdt
