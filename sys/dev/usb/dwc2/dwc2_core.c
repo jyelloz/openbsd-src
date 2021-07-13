@@ -887,6 +887,8 @@ STATIC void dwc2_gusbcfg_init(struct dwc2_hsotg *hsotg)
 		break;
 	}
 
+	usbcfg |= GUSBCFG_FORCEHOSTMODE;
+
 	DWC2_WRITE_4(hsotg, GUSBCFG, usbcfg);
 }
 
@@ -916,6 +918,8 @@ int dwc2_core_init(struct dwc2_hsotg *hsotg, bool initial_setup)
 	usbcfg &= ~GUSBCFG_TERMSELDLPULSE;
 	if (hsotg->core_params->ts_dline > 0)
 		usbcfg |= GUSBCFG_TERMSELDLPULSE;
+
+	usbcfg |= GUSBCFG_FORCEHOSTMODE;
 
 	DWC2_WRITE_4(hsotg, GUSBCFG, usbcfg);
 
