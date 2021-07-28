@@ -57,8 +57,7 @@ rkusbphy_match(struct device *parent, void *match, void *aux)
 {
 	struct fdt_attach_args *faa = aux;
 
-	return OF_is_compatible(faa->fa_node, "rockchip,rk3328-usb2phy") ||
-		OF_is_compatible(faa->fa_node, "rockchip,rk3328-usb3phy");
+	return OF_is_compatible(faa->fa_node, "rockchip,rk3328-usb2phy");
 }
 
 void
@@ -73,35 +72,33 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 	power_domain_enable(faa->fa_node);
 	clock_enable_all(faa->fa_node);
 
-	if (OF_is_compatible(faa->fa_node, "rockchip,rk3328-usb2phy")) {
-		child_node = OF_getnodebyname(faa->fa_node, "host-port");
-		if (child_node <= 0) {
-			printf(": no host-port child node\n");
-			return;
-		}
-		fdt_intr_establish_idx(
-			faa->fa_node,
-			child_node,
-			IPL_BIO,
-			rkusbphy_host_intr,
-			sc,
-			"host-port"
-		);
-
-		child_node = OF_getnodebyname(faa->fa_node, "otg-port");
-		if (child_node <= 0) {
-			printf(": no otg-port child node\n");
-			return;
-		}
-		fdt_intr_establish_idx(
-			faa->fa_node,
-			child_node,
-			IPL_BIO,
-			rkusbphy_otg_intr,
-			sc,
-			"otg-port"
-		);
+	child_node = OF_getnodebyname(faa->fa_node, "host-port");
+	if (child_node <= 0) {
+		printf(": no host-port child node\n");
+		return;
 	}
+	fdt_intr_establish_idx(
+		faa->fa_node,
+		child_node,
+		IPL_BIO,
+		rkusbphy_host_intr,
+		sc,
+		"host-port"
+	);
+
+	child_node = OF_getnodebyname(faa->fa_node, "otg-port");
+	if (child_node <= 0) {
+		printf(": no otg-port child node\n");
+		return;
+	}
+	fdt_intr_establish_idx(
+		faa->fa_node,
+		child_node,
+		IPL_BIO,
+		rkusbphy_otg_intr,
+		sc,
+		"otg-port"
+	);
 
 	printf("\n");
 }
