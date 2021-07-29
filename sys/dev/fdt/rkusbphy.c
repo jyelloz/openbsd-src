@@ -98,79 +98,71 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-rkusbphy_register_host_interrupts(struct rkusbphy_softc *sc)
+rkusbphy_register_interrupts(
+		struct rkusbphy_softc *sc,
+		char const *node_name,
+		int *n_interrupts_out,
+		void ***interrupts_out
+)
 {
 	int child_node;
-	int n_interrupts;
 	int idx;
+	int n_interrupts;
+	void **interrupts;
 
-	child_node = OF_getnodebyname(sc->sc_node, "host-port");
+	child_node = OF_getnodebyname(sc->sc_node, node_name);
 	if (child_node <= 0) {
-		printf(": no host-port child node\n");
+		printf(": no %s child node\n", node_name);
 		return;
 	}
 
 	n_interrupts = OF_getproplen(child_node, "interrupts");
 	if (n_interrupts < 1) {
-		printf(": no host-port interrupts to enable\n");
+		printf(": no %s interrupts to enable\n", node_name);
 		return;
 	}
 
-	sc->n_host_intr = n_interrupts;
-	sc->host_intr = malloc(
+	interrupts = malloc(
 			sizeof(void *) * n_interrupts,
 			M_DEVBUF,
 			M_WAITOK
 	);
 
 	for (idx = 0; idx < n_interrupts; idx++) {
-		sc->host_intr[idx] = fdt_intr_establish_idx(
+		interrupts[idx] = fdt_intr_establish_idx(
 			child_node,
 			idx,
 			IPL_BIO,
 			rkusbphy_host_intr,
 			sc,
-			"rkuhost"
+			"rkusbphy"
 		);
 	}
+
+	*n_interrupts_out = n_interrupts;
+	*interrupts_out = interrupts;
+}
+
+void
+rkusbphy_register_host_interrupts(struct rkusbphy_softc *sc)
+{
+	rkusbphy_register_interrupts(
+		sc,
+		"host-port",
+		&sc->n_host_intr,
+		&sc->host_intr
+	);
 }
 
 void
 rkusbphy_register_otg_interrupts(struct rkusbphy_softc *sc)
 {
-	int child_node;
-	int n_interrupts;
-	int idx;
-
-	child_node = OF_getnodebyname(sc->sc_node, "otg-port");
-	if (child_node <= 0) {
-		printf(": no otg-port child node\n");
-		return;
-	}
-
-	n_interrupts = OF_getproplen(child_node, "interrupts");
-	if (n_interrupts < 1) {
-		printf(": no otg-port interrupts to enable\n");
-		return;
-	}
-
-	sc->n_otg_intr = n_interrupts;
-	sc->otg_intr = malloc(
-			sizeof(void *) * n_interrupts,
-			M_DEVBUF,
-			M_WAITOK
+	rkusbphy_register_interrupts(
+		sc,
+		"otg-port",
+		&sc->n_otg_intr,
+		&sc->otg_intr
 	);
-
-	for (idx = 0; idx < n_interrupts; idx++) {
-		sc->otg_intr[idx] = fdt_intr_establish_idx(
-			child_node,
-			idx,
-			IPL_BIO,
-			rkusbphy_otg_intr,
-			sc,
-			"rkuotg"
-		);
-	}
 }
 
 int
