@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/types.h>
+#include <sys/malloc.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -35,11 +37,21 @@ struct rkusbphy_softc {
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 
+	int                     sc_node;
+
+	int                     n_host_intr;
+	void *                 *host_intr;
+	int                     n_otg_intr;
+	void *                 *otg_intr;
+
 	struct phy_device	sc_pd;
 };
 
 int rkusbphy_match(struct device *, void *, void *);
 void rkusbphy_attach(struct device *, struct device *, void *);
+void rkusbphy_register_host_interrupts(struct rkusbphy_softc *);
+void rkusbphy_register_otg_interrupts(struct rkusbphy_softc *);
+int rkusbphy_enable(void *, uint32_t *);
 
 struct cfattach	rkusbphy_ca = {
 	sizeof (struct rkusbphy_softc), rkusbphy_match, rkusbphy_attach
@@ -65,42 +77,106 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct rkusbphy_softc *sc = (struct rkusbphy_softc *)self;
 	struct fdt_attach_args *faa = aux;
-	int child_node = -1;
 
 	printf(": %llx, %llx", faa->fa_reg[0].addr, faa->fa_reg[0].size);
 
 	power_domain_enable(faa->fa_node);
 	clock_enable_all(faa->fa_node);
 
-	child_node = OF_getnodebyname(faa->fa_node, "host-port");
+	sc->sc_node = faa->fa_node;
+
+	rkusbphy_register_host_interrupts(sc);
+	rkusbphy_register_otg_interrupts(sc);
+
+	sc->sc_pd.pd_node = faa->fa_node;
+	sc->sc_pd.pd_cookie = sc;
+	sc->sc_pd.pd_enable = rkusbphy_enable;
+
+	phy_register(&sc->sc_pd);
+
+	printf("\n");
+}
+
+void
+rkusbphy_register_host_interrupts(struct rkusbphy_softc *sc)
+{
+	int child_node;
+	int n_interrupts;
+	int idx;
+
+	child_node = OF_getnodebyname(sc->sc_node, "host-port");
 	if (child_node <= 0) {
 		printf(": no host-port child node\n");
 		return;
 	}
-	fdt_intr_establish_idx(
-		faa->fa_node,
-		child_node,
-		IPL_BIO,
-		rkusbphy_host_intr,
-		sc,
-		"host-port"
+
+	n_interrupts = OF_getproplen(child_node, "interrupts");
+	if (n_interrupts < 1) {
+		printf(": no host-port interrupts to enable\n");
+		return;
+	}
+
+	sc->n_host_intr = n_interrupts;
+	sc->host_intr = malloc(
+			sizeof(void *) * n_interrupts,
+			M_DEVBUF,
+			M_WAITOK
 	);
 
-	child_node = OF_getnodebyname(faa->fa_node, "otg-port");
+	for (idx = 0; idx < n_interrupts; idx++) {
+		sc->host_intr[idx] = fdt_intr_establish_idx(
+			child_node,
+			idx,
+			IPL_BIO,
+			rkusbphy_host_intr,
+			sc,
+			"rkuhost"
+		);
+	}
+}
+
+void
+rkusbphy_register_otg_interrupts(struct rkusbphy_softc *sc)
+{
+	int child_node;
+	int n_interrupts;
+	int idx;
+
+	child_node = OF_getnodebyname(sc->sc_node, "otg-port");
 	if (child_node <= 0) {
 		printf(": no otg-port child node\n");
 		return;
 	}
-	fdt_intr_establish_idx(
-		faa->fa_node,
-		child_node,
-		IPL_BIO,
-		rkusbphy_otg_intr,
-		sc,
-		"otg-port"
+
+	n_interrupts = OF_getproplen(child_node, "interrupts");
+	if (n_interrupts < 1) {
+		printf(": no otg-port interrupts to enable\n");
+		return;
+	}
+
+	sc->n_otg_intr = n_interrupts;
+	sc->otg_intr = malloc(
+			sizeof(void *) * n_interrupts,
+			M_DEVBUF,
+			M_WAITOK
 	);
 
-	printf("\n");
+	for (idx = 0; idx < n_interrupts; idx++) {
+		sc->otg_intr[idx] = fdt_intr_establish_idx(
+			child_node,
+			idx,
+			IPL_BIO,
+			rkusbphy_otg_intr,
+			sc,
+			"rkuotg"
+		);
+	}
+}
+
+int
+rkusbphy_enable(void *cookie, uint32_t *cells)
+{
+	return 0;
 }
 
 int
