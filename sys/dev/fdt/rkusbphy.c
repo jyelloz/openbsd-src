@@ -43,7 +43,8 @@ struct rkusbphy_softc {
 	void			*host_intr;
 	void			*otg_intr;
 
-	struct phy_device	sc_pd;
+	struct phy_device	host_port;
+	struct phy_device	otg_port;
 };
 
 int rkusbphy_match(struct device *, void *, void *);
@@ -96,11 +97,6 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 
 	rkusbphy_register_host_interrupts(sc);
 	rkusbphy_register_otg_interrupts(sc);
-
-	sc->sc_pd.pd_node = faa->fa_node;
-	sc->sc_pd.pd_cookie = sc;
-	sc->sc_pd.pd_enable = rkusbphy_enable;
-	phy_register(&sc->sc_pd);
 
 	kthread_create_deferred(rkusbphy_deferred, sc);
 }
@@ -178,20 +174,30 @@ rkusbphy_register_linestate_interrupt(
 void
 rkusbphy_register_host_interrupts(struct rkusbphy_softc *sc)
 {
+	int const child_node = OF_getnodebyname(sc->sc_node, "host-port");
 	sc->host_intr = rkusbphy_register_linestate_interrupt(sc, "host-port");
+	sc->host_port.pd_node = child_node;
+	sc->host_port.pd_cookie = sc;
+	sc->host_port.pd_enable = rkusbphy_enable;
+	phy_register(&sc->host_port);
 }
 
 void
 rkusbphy_register_otg_interrupts(struct rkusbphy_softc *sc)
 {
+	int const child_node = OF_getnodebyname(sc->sc_node, "otg-port");
 	sc->otg_intr = rkusbphy_register_linestate_interrupt(sc, "otg-port");
+	sc->otg_port.pd_node = child_node;
+	sc->otg_port.pd_cookie = sc;
+	sc->otg_port.pd_enable = rkusbphy_enable;
+	phy_register(&sc->otg_port);
 }
 
 int
 rkusbphy_enable(void *cookie, uint32_t *cells)
 {
-	struct rkusbphy_softc *sc = (struct rkusbphy_softc *) cookie;
-	printf("%s: enabling PHY\n", sc->sc_dev.dv_xname);
+	//struct rkusbphy_softc *sc = (struct rkusbphy_softc *) cookie;
+	//printf("%s: enabling PHY\n", sc->sc_dev.dv_xname);
 	return 0;
 }
 
