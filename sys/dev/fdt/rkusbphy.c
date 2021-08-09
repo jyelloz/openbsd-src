@@ -19,6 +19,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/kthread.h>
 
 #include <machine/intr.h>
 #include <machine/bus.h>
@@ -34,15 +35,13 @@
 
 struct rkusbphy_softc {
 	struct device		sc_dev;
-	bus_space_tag_t		sc_iot;
-	bus_space_handle_t	sc_ioh;
+	struct regmap		*sc_rm;
+	bus_size_t		sc_off;
 
-	int                     sc_node;
+	int			sc_node;
 
-	int                     n_host_intr;
-	void *                 *host_intr;
-	int                     n_otg_intr;
-	void *                 *otg_intr;
+	void			*host_intr;
+	void			*otg_intr;
 
 	struct phy_device	sc_pd;
 };
@@ -51,6 +50,7 @@ int rkusbphy_match(struct device *, void *, void *);
 void rkusbphy_attach(struct device *, struct device *, void *);
 void rkusbphy_register_host_interrupts(struct rkusbphy_softc *);
 void rkusbphy_register_otg_interrupts(struct rkusbphy_softc *);
+void rkusbphy_deferred(void *);
 int rkusbphy_enable(void *, uint32_t *);
 
 struct cfattach	rkusbphy_ca = {
@@ -61,8 +61,7 @@ struct cfdriver rkusbphy_cd = {
 	NULL, "rkusbphy", DV_DULL
 };
 
-int	rkusbphy_host_intr(void *);
-int	rkusbphy_otg_intr(void *);
+int	rkusbphy_intr(void *);
 
 int
 rkusbphy_match(struct device *parent, void *match, void *aux)
@@ -78,12 +77,22 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 	struct rkusbphy_softc *sc = (struct rkusbphy_softc *)self;
 	struct fdt_attach_args *faa = aux;
 
-	printf(": %llx, %llx", faa->fa_reg[0].addr, faa->fa_reg[0].size);
+	sc->sc_node = faa->fa_node;
+
+	if (faa->fa_nreg < 1) {
+		printf(": no registers\n");
+		return;
+	}
+	sc->sc_off = faa->fa_reg[0].addr;
+
+	sc->sc_rm = regmap_bynode(OF_parent(sc->sc_node));
+	if (sc->sc_rm == NULL) {
+		printf(": can't map registers\n");
+		return;
+	}
 
 	power_domain_enable(faa->fa_node);
 	clock_enable_all(faa->fa_node);
-
-	sc->sc_node = faa->fa_node;
 
 	rkusbphy_register_host_interrupts(sc);
 	rkusbphy_register_otg_interrupts(sc);
@@ -91,96 +100,123 @@ rkusbphy_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_pd.pd_node = faa->fa_node;
 	sc->sc_pd.pd_cookie = sc;
 	sc->sc_pd.pd_enable = rkusbphy_enable;
-
 	phy_register(&sc->sc_pd);
 
-	printf("\n");
+	kthread_create_deferred(rkusbphy_deferred, sc);
 }
 
+#define LINESTATE_IRQ_ENABLE	0x110UL
+#define LINESTATE_IRQ_STATE	0x114UL
+#define LINESTATE_IRQ_CLEAR	0x118UL
 void
-rkusbphy_register_interrupts(
-		struct rkusbphy_softc *sc,
-		char const *node_name,
-		int *n_interrupts_out,
-		void ***interrupts_out
+rkusbphy_deferred(void *const self)
+{
+	struct rkusbphy_softc *const sc = (struct rkusbphy_softc *) self;
+	uint32_t const old_reg = regmap_read_4(sc->sc_rm, LINESTATE_IRQ_ENABLE);
+	uint32_t const new_reg = old_reg | (
+		(1U << 0) // OTG Linestate
+		|
+		(1U << 1) // HOST Linestate
+		|
+		(1U << 2) // "BVALID"
+		|
+		(1U << 4) // OTG ID Rise
+		|
+		(1U << 5) // OTG ID Fall
+	);
+	/* XXX: Known to kind of work */
+	//regmap_write_4(sc->sc_rm, LINESTATE_IRQ_ENABLE, 0xffffffff);
+	/* not confirmed to work yet */
+	regmap_write_4(sc->sc_rm, LINESTATE_IRQ_ENABLE, new_reg);
+	printf(
+		"%s: irq enable old=%#x, new=%#x\n",
+		sc->sc_dev.dv_xname,
+		old_reg,
+		new_reg
+	);
+}
+
+void *
+rkusbphy_register_linestate_interrupt(
+	struct rkusbphy_softc *sc,
+	char const *node_name
 )
 {
 	int child_node;
-	int idx;
-	int n_interrupts;
-	void **interrupts;
+	int linestate_idx;
+	void *interrupt;
 
 	child_node = OF_getnodebyname(sc->sc_node, node_name);
 	if (child_node <= 0) {
 		printf(": no %s child node\n", node_name);
-		return;
+		return NULL;
 	}
 
-	n_interrupts = OF_getproplen(child_node, "interrupts");
-	if (n_interrupts < 1) {
-		printf(": no %s interrupts to enable\n", node_name);
-		return;
+	linestate_idx = OF_getindex(child_node, "linestate", "interrupt-names");
+	if (linestate_idx < 0) {
+		printf(": %s no linestate interrupts to enable\n", node_name);
+		return NULL;
 	}
-
-	interrupts = malloc(
-			sizeof(void *) * n_interrupts,
-			M_DEVBUF,
-			M_WAITOK
+	interrupt = fdt_intr_establish_idx(
+		child_node,
+		linestate_idx,
+		IPL_BIO,
+		rkusbphy_intr,
+		sc,
+		sc->sc_dev.dv_xname
 	);
-
-	for (idx = 0; idx < n_interrupts; idx++) {
-		interrupts[idx] = fdt_intr_establish_idx(
-			child_node,
-			idx,
-			IPL_BIO,
-			rkusbphy_host_intr,
-			sc,
-			"rkusbphy"
-		);
+	if (interrupt == NULL) {
+		printf(": unable to establish linestate interrupt@%d\n", linestate_idx);
+		return NULL;
 	}
 
-	*n_interrupts_out = n_interrupts;
-	*interrupts_out = interrupts;
+	printf(": intr=%p", interrupt);
+
+	return interrupt;
 }
 
 void
 rkusbphy_register_host_interrupts(struct rkusbphy_softc *sc)
 {
-	rkusbphy_register_interrupts(
-		sc,
-		"host-port",
-		&sc->n_host_intr,
-		&sc->host_intr
-	);
+	sc->host_intr = rkusbphy_register_linestate_interrupt(sc, "host-port");
 }
 
 void
 rkusbphy_register_otg_interrupts(struct rkusbphy_softc *sc)
 {
-	rkusbphy_register_interrupts(
-		sc,
-		"otg-port",
-		&sc->n_otg_intr,
-		&sc->otg_intr
-	);
+	sc->otg_intr = rkusbphy_register_linestate_interrupt(sc, "otg-port");
 }
 
 int
 rkusbphy_enable(void *cookie, uint32_t *cells)
 {
+	struct rkusbphy_softc *sc = (struct rkusbphy_softc *) cookie;
+	printf("%s: enabling PHY\n", sc->sc_dev.dv_xname);
 	return 0;
 }
 
 int
-rkusbphy_host_intr(void *arg)
+rkusbphy_intr(void *arg)
 {
-	printf("rkusbphy: handling host interrupt\n");
-	return 1;
-}
-
-int
-rkusbphy_otg_intr(void *arg)
-{
-	printf("rkusbphy: handling otg interrupt\n");
+	uint32_t reg;
+	struct rkusbphy_softc *sc = (struct rkusbphy_softc *) arg;
+	reg = regmap_read_4(sc->sc_rm, LINESTATE_IRQ_STATE);
+	printf(
+		"%s: handling linestate interrupt, state=%#x clearing flags\n",
+		sc->sc_dev.dv_xname,
+		reg
+	);
+	reg = (
+		(1U << 0) // OTG Linestate
+		|
+		(1U << 1) // HOST Linestate
+		|
+		(1U << 2) // "BVALID"
+		|
+		(1U << 4) // OTG ID Rise
+		|
+		(1U << 5) // OTG ID Fall
+	);
+	regmap_write_4(sc->sc_rm, LINESTATE_IRQ_CLEAR, reg);
 	return 1;
 }
