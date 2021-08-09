@@ -103,7 +103,7 @@ rk3328_dwctwo_attach(struct device *parent, struct device *self, void *aux)
 	idx = OF_getindex(sc->sc_node, "usb2-phy", "phy-names");
 	if (idx < 0) {
 		printf(", no PHYs to enable");
-	} else if (phy_enable_idx(sc->sc_node, idx) != ENXIO) {
+	} else if (phy_enable_idx(sc->sc_node, idx) != 0) {
 		printf(", failed to enable PHY@%d\n", idx);
 		return;
 	}
